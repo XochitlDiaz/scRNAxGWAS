@@ -118,5 +118,7 @@ def genCellTypePrograms(exp_mat_dir, ct_colname, status_colname, sample_colname)
 
     # Minimization
     scoremtxs = (scoremtxs - scoremtxs.min())/(scoremtxs.max()-scoremtxs.min())
+
+    #Save transformed scores
     scoremtxs.to_csv("%s/%s_transgenescores.csv"%(save_dir, data_name))
 
