@@ -121,22 +121,34 @@ def genStatusPrograms(exp_mat_dir, ct_colname, status_colname, sample_colname,di
     # write matrix to file
     # This matrix contains a cloumn per cell type and rows per genes
     # It stores the results of DE of one celltype vs all other celltypes
-    if os.path.isdir('./celltype_program') == False:
-        os.mkdir("./celltype_program")
-    save_dir="./celltype_program"
+    if os.path.isdir('./status_program') == False:
+        os.mkdir("./status_program")
+    save_dir="./status_program"
     pvalmtx.to_csv("%s/%s%svs%s_adjpval.csv"%(save_dir, data_name, diseaselab, base_state))
     logfoldmtx.to_csv("%s/%s%svs%s_logfold.csv"%(save_dir, data_name, diseaselab, base_state))
     scoremtx.to_csv("%s/%s%svs%s_zscore.csv"%(save_dir, data_name, diseaselab, base_state))
 
-    # Transform p-value to x=-2log(P)
-    scoremtx = scoremtx.clip(lower=0)
-    scoremtx = pd.DataFrame(scipy.stats.norm.sf(scoremtx), index=scoremtx.index, columns=scoremtx.columns)
-    scoremtx = scoremtx+1e-08
-    scoremtx = -2*np.log(scoremtx)
+    ### Z - Score transformation ###
+    # Transform zscore to x=-2log(zscore)
+    scoremtx2 = scoremtx.clip(lower=0)
+    scoremtx2 = pd.DataFrame(scipy.stats.norm.sf(scoremtx2), index=scoremtx2.index, columns=scoremtx2.columns)
+    scoremtx2 = scoremtx2+1e-08
+    scoremtx2 = -2*np.log(scoremtx2)
+    # Minimization
+    scoremtx2 = (scoremtx2 - scoremtx2.min())/(scoremtx2.max()-scoremtx2.min())
+    # Save transfromed scores
+    scoremtx2.to_csv("%s/%s_transgenescores.csv"%(save_dir, data_name))
+
+
+
+    # Simple transformation
+    # Transform zscore to x=-2log(zscore)
+    scoremtxs = pd.DataFrame(scipy.stats.norm.sf(scoremtxs2), index=scoremtxs2.index, columns=scoremtxs2.columns)
+    scoremtxs = scoremtxs2+1e-08
+    scoremtxs = -2*np.log(scoremtxs)
 
     # Minimization
-    scoremtx = (scoremtx - scoremtx.min())/(scoremtx.max()-scoremtx.min())
+    scoremtxs = (scoremtxs - scoremtxs.min())/(scoremtxs.max()-scoremtxs.min())
 
-    # Save transfromed scores
-    scoremtx.to_csv("%s/%s_transgenescores.csv"%(save_dir, data_name))
-
+    #Save transformed scores
+    scoremtxs.to_csv("%s/%s_simpletransgenescores.csv"%(save_dir, data_name))

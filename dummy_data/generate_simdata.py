@@ -6,6 +6,20 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+
+
+#%%
+### Meta Data Matrix
+age = np.random.normal(loc=65, scale= 5, size=len(df.index))
+md_data = {"Patient": np.repeat(["P1","P2","P3","P4","P5","P6","P7"],[10,10,12,10,10,6,6]),
+            "Status": np.repeat(["HC", "Case"],[32,32]),
+            "Age": np.around(age,0),
+            "Celltype": np.repeat(["mic", "ast", "mic","ast","mic","ast","mic","ast","mic", "ast", "mic","ast","mic","ast"], [5,5,5,5,6,6,5,5,5,5,3,3,3,3]) }
+md= pd.DataFrame(md_data,index= cells)
+
+md.to_csv("./dummy_data/metadata.csv")
+
+
 #%%
 ### Counts Matrix
 
@@ -25,22 +39,28 @@ cells = [prefix + element + suffix for element in cells]
 df = pd.DataFrame(0,index = cells, columns= genes)
 
 # Defined random values for rows 0:43
-for i in range(0,len(df.index)-20):
-    df.iloc[[i]] = np.random.normal(loc=5, scale=2, size= len(df.columns))
+for i in range(0,len(df.index)):
+    df.iloc[[i]] = np.random.normal(loc=0, scale=2, size= len(df.columns))
 
-# Downreg case 1
-df.iloc[63-5:64, 0:6] = -5
-# Upreg case 1
-df.iloc[63-5:64, 5:11]= 5
 
-# Up reg case 2
-df.iloc[57-5:58, 0:6] = 5
-# Down reg case 3
-df.iloc[57-5:58, 5:11]= -5
+imic = md.loc[md['Celltype'] == 'mic'].index
+iast = md.loc[md['Celltype'] == 'ast'].index
+
+# Downreg mic
+df.loc[imic, df.columns[0:6]] = -5
+
+# Upreg mic
+df.loc[imic, df.columns[10:16]]= 5
+
+# Zero expresion in ast
+df.loc[iast, df.columns[13:18]] = 0
 
 df.to_csv("./dummy_data/counts.csv", index= False, header= False)
 
 # %%
+
+### CODE SNIPPETS ###
+
 #Index names
 df.index
 # single cell value
@@ -71,14 +91,3 @@ df2 = pd.DataFrame(data)
 
 #Write DataFrame to csv
 df.to_csv("./dummy_data/counts.csv")
-
-#%%
-### Meta Data Matrix
-age = np.random.normal(loc=65, scale= 5, size=len(df.index))
-md_data = {"Patient": np.repeat(["P1","P2","P3","P4","P5","P6","P7"],[10,10,10,10,12,6,6]),
-            "Status": np.repeat(["HC1", "HC2", "Case1", "Case2"],[44,8,6,6]),
-            "Age": np.around(age,0),
-            "Celltype": np.repeat("mic",len(df.index)),  }
-md= pd.DataFrame(md_data,index= cells)
-
-md.to_csv("./dummy_data/metadata.csv")
