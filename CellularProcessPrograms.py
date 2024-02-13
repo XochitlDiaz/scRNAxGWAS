@@ -53,36 +53,31 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
     ######
 
     model = NMF(n_components=num_celltypes+10, init='random', random_state=0)
-    
+    sc.pp._highly_variable_genes(exp, n_top_genes=2000)
     exp = exp[:,exp.var['highly_variable']]
-    tissueadata = tissueadata[:,tissueadata.var['highly_variable']]
-    X = tissueadata.layers['counts']
-    X = X/np.max(X)
-    W = model.fit_transform(X)
-    W = pd.DataFrame(W, index = tissueadata.obs_names, columns = ['NMF_%d'%i for i in range(W.shape[1])])
-    W.to_csv(outdir + '/%s'%tissue+'_cellprograms.csv')
-    H = pd.DataFrame(model.components_.T, index=tissueadata.var_names, columns=['NMF_%d'%i for i in range(model.components_.shape[0])])
-    H.to_csv(outdir + '/%s'%tissue+'_geneprograms.csv')
-
-
-
-
-    print(data_name)
-    filename, sample_label = scdatasets[data_name]
-    exp = sc.read(filename)
-    print(exp.shape)
-    num_celltypes = len(set(exp.obs['Celltype']))
-    model = NMF(n_components=num_celltypes+10, init='random', random_state=0)
-    exp = exp[:,exp.var['highly_variable']]
+    exp.layers['counts'] = exp.X
     X = exp.layers['counts']
+    # NMF only accepts non negative values
+    if X.min()< 0:
+        X = X + min(X)
     X = X/np.max(X)
     W = model.fit_transform(X)
     W = pd.DataFrame(W, index = exp.obs_names, columns = ['NMF_%d'%i for i in range(W.shape[1])])
-    W.to_csv(outdir + '/%s'%data_name+'_cellprograms.csv')
     H = pd.DataFrame(model.components_.T, index=exp.var_names, columns=['NMF_%d'%i for i in range(model.components_.shape[0])])
-    H.to_csv(outdir + '/%s'%data_name+'_geneprograms.csv')
 
+    if not os.path.exists("./process_program"):
+        os.mkdir("./process_program")
 
+    save_dir = "./process_program"
+    W.to_csv("%s/%s_cellprograms.csv"%(save_dir,data_name))
+    H.to_csv("%s/%s_geneprograms.csv"%(save_dir,data_name))
+
+    for i in range(W.shape[1]):
+        exp.obs['NMF_%d'%i] = W['NMF_%d'%i]
+    
+    sc.tl.umap
+    sc.pl.umap(exp, color=['NMF_%d'%i for i in range(W.shape[1])], color_map='Reds', save="%s/%s_healthyprograms.pdf"%(save_dir,data_name))
+    sc.pl.umap(exp, color=['cell_type'], ncols=1, save="%s/%s_healthyUMAP.pdf"%(save_dir,data_name))
 
 ###############################
 
