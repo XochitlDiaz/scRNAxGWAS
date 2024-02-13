@@ -104,24 +104,25 @@ def genCellTypePrograms(exp_mat_dir, ct_colname, status_colname, sample_colname)
     # write matrix to file
     # This matrix contains a cloumn per cell type and rows per genes
     # It stores the results of DE of one celltype vs all other celltypes
-    os.mkdir("./celltype_program")
+    if not os.path.exists("./celltype_program"):
+        os.mkdir("./celltype_program")
+    
     save_dir="./celltype_program"
     pvalmtxs.to_csv("%s/%s_adjpval.csv"%(save_dir, data_name))
     logfoldmtxs.to_csv("%s/%s_logfold.csv"%(save_dir, data_name))
     scoremtxs.to_csv("%s/%s_zscore.csv"%(save_dir, data_name))
+
 
     # Transform zscore to x=-2log(zscore)
     scoremtxs2 = scoremtxs.clip(lower=0)
     scoremtxs2 = pd.DataFrame(scipy.stats.norm.sf(scoremtxs2), index=scoremtxs2.index, columns=scoremtxs2.columns)
     scoremtxs2 = scoremtxs2+1e-08
     scoremtxs2 = -2*np.log(scoremtxs2)
-
     # Minimization
     scoremtxs2 = (scoremtxs2 - scoremtxs2.min())/(scoremtxs2.max()-scoremtxs2.min())
-
     #Save transformed scores
     scoremtxs2.to_csv("%s/%s_transgenescores.csv"%(save_dir, data_name))
-
+    print("transformed zscores as described in the paper were saved as:  transgenescores.csv" )
 
 
 
@@ -130,9 +131,8 @@ def genCellTypePrograms(exp_mat_dir, ct_colname, status_colname, sample_colname)
     scoremtxs = pd.DataFrame(scipy.stats.norm.sf(scoremtxs), index=scoremtxs.index, columns=scoremtxs.columns)
     scoremtxs = scoremtxs+1e-08
     scoremtxs = -2*np.log(scoremtxs)
-
     # Minimization
     scoremtxs = (scoremtxs - scoremtxs.min())/(scoremtxs.max()-scoremtxs.min())
-
     #Save transformed scores
-    scoremtxs.to_csv("%s/%s_simpletransgenescores.csv"%(save_dir, data_name))
+    scoremtxs.to_csv("%s/%s_alltransgenescores.csv"%(save_dir, data_name))
+    print(" up regulated and down regulated zscores were saved as:  alltransgenescores.csv" )

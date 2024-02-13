@@ -10,10 +10,11 @@ import os
 
 #%%
 ### Meta Data Matrix
-age = np.random.normal(loc=65, scale= 5, size=len(df.index))
+age = np.random.normal(loc=65, scale= 5, size=7)
+age = np.around(age,0)
 md_data = {"Patient": np.repeat(["P1","P2","P3","P4","P5","P6","P7"],[10,10,12,10,10,6,6]),
             "Status": np.repeat(["HC", "Case"],[32,32]),
-            "Age": np.around(age,0),
+            "Age": np.repeat(age,[10,10,12,10,10,6,6]),
             "Celltype": np.repeat(["mic", "ast", "mic","ast","mic","ast","mic","ast","mic", "ast", "mic","ast","mic","ast"], [5,5,5,5,6,6,5,5,5,5,3,3,3,3]) }
 md= pd.DataFrame(md_data,index= cells)
 

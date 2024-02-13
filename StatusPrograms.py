@@ -70,7 +70,7 @@ def genStatusPrograms(exp_mat_dir, ct_colname, status_colname, sample_colname,di
     # zscore of each gene for each group
     scoremtx =  pd.DataFrame(index = genes)
 
-    print(" Computing comparison: " + exp.obs['status'].unique())
+    print(" Computing comparison: " + str(exp.obs['status'].unique()))
     for ct in exp.obs['cell_type'].unique():
         print(ct)
         subset = exp[(exp.obs['cell_type']== ct)]
@@ -143,12 +143,10 @@ def genStatusPrograms(exp_mat_dir, ct_colname, status_colname, sample_colname,di
 
     # Simple transformation
     # Transform zscore to x=-2log(zscore)
-    scoremtxs = pd.DataFrame(scipy.stats.norm.sf(scoremtxs2), index=scoremtxs2.index, columns=scoremtxs2.columns)
-    scoremtxs = scoremtxs2+1e-08
-    scoremtxs = -2*np.log(scoremtxs)
-
+    scoremtx = pd.DataFrame(scipy.stats.norm.sf(scoremtx), index=scoremtx.index, columns=scoremtx.columns)
+    scoremtx = scoremtx+1e-08
+    scoremtx = -2*np.log(scoremtx)
     # Minimization
-    scoremtxs = (scoremtxs - scoremtxs.min())/(scoremtxs.max()-scoremtxs.min())
-
-    #Save transformed scores
-    scoremtxs.to_csv("%s/%s_simpletransgenescores.csv"%(save_dir, data_name))
+    scoremtx = (scoremtx - scoremtx.min())/(scoremtx.max()-scoremtx.min())
+    # Save transformed scores
+    scoremtx.to_csv("%s/%s_alltransgenescores.csv"%(save_dir, data_name))
