@@ -38,6 +38,7 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
     #change referenced column names for anndata manipulation
     exp.obs.rename(columns={ct_colname:'cell_type', status_colname:'status', sample_colname:'patient_id'},inplace=True)
     
+    num_celltypes = len(exp.obs["cell_type"].unique())
     #######
     # When gnerating Celltype Data, first give some information
     # on the data that is being processed
@@ -45,18 +46,23 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
     data_name = exp_mat_dir[exp_mat_dir.rfind("/") + 1:(exp_mat_dir.rfind(".h5ad"))] # data_name = tissue
     print("Automatically chosen data name:  " + data_name)
     print("\nDescription of the data:")
-    print(str(exp.shape[0]) + " cells | " + str(exp.shape[1]) + " genes | "+ str(len(set(exp.obs['patient_id']))) + " samples")
+    print( str(num_celltypes) + " cells | " + str(exp.shape[1]) + " genes | "+ str(len(set(exp.obs['patient_id']))) + " samples")
     print(str(len(set(exp.obs['cell_type']))) + " cell types: " + str(list(exp.obs['cell_type'].unique())))
     print("cell state groups: " + str(list(exp.obs['status'].unique())))
+    print("\nComputing " + str(num_celltypes + 10) + " cellular processes")
     ######
 
-    delabel =  'celltype_DE'     
-    # the data should have more than 10 cells of the cell type to study
-    counts = Counter(exp.obs["cell_type"])
-    #minimum cell type frequency
-    min_ctfreq= 10
-    frequent_ct = [key for key, count in counts.items() if count > 10]
-    adata = exp[exp.obs['cell_type'].isin(frequent_ct)]
+    model = NMF(n_components=num_celltypes+10, init='random', random_state=0)
+    
+    exp = exp[:,exp.var['highly_variable']]
+    tissueadata = tissueadata[:,tissueadata.var['highly_variable']]
+    X = tissueadata.layers['counts']
+    X = X/np.max(X)
+    W = model.fit_transform(X)
+    W = pd.DataFrame(W, index = tissueadata.obs_names, columns = ['NMF_%d'%i for i in range(W.shape[1])])
+    W.to_csv(outdir + '/%s'%tissue+'_cellprograms.csv')
+    H = pd.DataFrame(model.components_.T, index=tissueadata.var_names, columns=['NMF_%d'%i for i in range(model.components_.shape[0])])
+    H.to_csv(outdir + '/%s'%tissue+'_geneprograms.csv')
 
 
 
@@ -75,10 +81,6 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
     W.to_csv(outdir + '/%s'%data_name+'_cellprograms.csv')
     H = pd.DataFrame(model.components_.T, index=exp.var_names, columns=['NMF_%d'%i for i in range(model.components_.shape[0])])
     H.to_csv(outdir + '/%s'%data_name+'_geneprograms.csv')
-
-
-
-
 
 
 
@@ -102,10 +104,13 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
 
 
 
+
+
+
 ################# FUNCTION NOT UPDATED #################
-def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_colname):
+def genCellTypePrograms(exp_mat_dir, ct_colname, status_colname, sample_colname):
     #read in data
-    W = sc.read_h5ad(exp_mat_dir)
+    exp = sc.read_h5ad(exp_mat_dir)
     #change referenced column names for anndata manipulation
     exp.obs.rename(columns={ct_colname:'cell_type', status_colname:'status', sample_colname:'patient_id'},inplace=True)
     
@@ -179,21 +184,35 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
     # write matrix to file
     # This matrix contains a cloumn per cell type and rows per genes
     # It stores the results of DE of one celltype vs all other celltypes
-    os.mkdir("./celltype_program")
+    if not os.path.exists("./celltype_program"):
+        os.mkdir("./celltype_program")
+    
     save_dir="./celltype_program"
     pvalmtxs.to_csv("%s/%s_adjpval.csv"%(save_dir, data_name))
     logfoldmtxs.to_csv("%s/%s_logfold.csv"%(save_dir, data_name))
     scoremtxs.to_csv("%s/%s_zscore.csv"%(save_dir, data_name))
 
-    # Transform p-value to x=-2log(P)
-    scoremtxs = scoremtxs.clip(lower=0)
+
+    # Transform zscore to x=-2log(zscore)
+    scoremtxs2 = scoremtxs.clip(lower=0)
+    scoremtxs2 = pd.DataFrame(scipy.stats.norm.sf(scoremtxs2), index=scoremtxs2.index, columns=scoremtxs2.columns)
+    scoremtxs2 = scoremtxs2+1e-08
+    scoremtxs2 = -2*np.log(scoremtxs2)
+    # Minimization
+    scoremtxs2 = (scoremtxs2 - scoremtxs2.min())/(scoremtxs2.max()-scoremtxs2.min())
+    #Save transformed scores
+    scoremtxs2.to_csv("%s/%s_transgenescores.csv"%(save_dir, data_name))
+    print("transformed zscores as described in the paper were saved as:  transgenescores.csv" )
+
+
+
+    # Simple transformation
+    # Transform zscore to x=-2log(zscore)
     scoremtxs = pd.DataFrame(scipy.stats.norm.sf(scoremtxs), index=scoremtxs.index, columns=scoremtxs.columns)
     scoremtxs = scoremtxs+1e-08
     scoremtxs = -2*np.log(scoremtxs)
-
     # Minimization
     scoremtxs = (scoremtxs - scoremtxs.min())/(scoremtxs.max()-scoremtxs.min())
-
     #Save transformed scores
-    scoremtxs.to_csv("%s/%s_transgenescores.csv"%(save_dir, data_name))
-
+    scoremtxs.to_csv("%s/%s_alltransgenescores.csv"%(save_dir, data_name))
+    print(" up regulated and down regulated zscores were saved as:  alltransgenescores.csv" )
