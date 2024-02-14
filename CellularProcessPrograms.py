@@ -1,6 +1,7 @@
 # Generate Cell type Programs
 # 9 Feb 2024
-# XochitlDiaz
+# Adapted from https://github.com/karthikj89/scgenetics/blob/master/src/jointNMF
+# by XochitlDiaz
 
 # This function will generate Cell Type programs out 
 # of a previously QCed .h5ad file
@@ -12,10 +13,12 @@ import pandas as pd
 import anndata
 import os
 import seaborn as sns
+import scipy
 from scipy import sparse
 from time import time
 from sklearn.utils import check_random_state
 from sklearn.utils.extmath import safe_sparse_dot
+from sklearn.decomposition import NMF
 from matplotlib import pyplot as plt
 
 
@@ -33,6 +36,12 @@ scdatasets = 'Status'
 # Indicate the name of the cloumn that defines patient ID
 sample_colname = 'Patient'
 
+#default
+data_name = 'simdata'
+
+hlabel= 'HC'
+
+dlabel= 'Case'
 
 ########## TEST ###############
 scdatasets = {'simdata': ("./dummy_data/simdata.h5ad","Patient") }
@@ -155,8 +164,35 @@ _smallnumber = 1E-10
 _smallnumber2 = 1E-04
 
 class JointNMF:
-    def __init__(self, Xh, Xd, Wh=None, Hh=None, Wshh=None, Hshh=None, Wshd=None, Hshd=None, Wd=None, Hd=None, 
+    def __init__(self, exp_mat_dir, status_colname, hlabel, dlabel ,Xh,Xd, Wh=None, Hh=None, Wshh=None, Hshh=None, Wshd=None, Hshd=None, Wd=None, Hd=None, 
                  nh_components=10, nsh_components=10, nd_components=10, gamma=1, mu=None, numstarts=5):
+        
+        self.exp = sc.read_h5ad(exp_mat_dir)
+        scaleX = self.exp.X.min()
+        
+        #######
+        # When gnerating Latent factors data, first give some information
+        # on the data that is being processed
+        print("Generating celltype programs for the file:" + exp_mat_dir)
+        data_name = exp_mat_dir[exp_mat_dir.rfind("/") + 1:(exp_mat_dir.rfind(".h5ad"))]
+        print("Automatically chosen data name:  " + data_name)
+        print("\nDescription of the data:")
+        print(str(self.exp.shape[0]) + " cells | " + str(self.exp.shape[1]) + " genes")
+        print("cell state groups: " + str(list(self.exp.obs[status_colname].unique())))
+        print("Generating joint NMF for " + hlabel + "and " + dlabel)
+        ######
+
+
+
+        Xh = self.exp[self.exp.obs[status_colname]==hlabel]
+        Xd = self.exp[self.exp.obs[status_colname]==dlabel]
+
+        Xh = Xh.X
+        Xd = Xd.X
+        if scaleX < 0 :
+            Xh = Xh + scaleX
+            Xd = Xd + scaleX
+        
         self.Xh = scipy.sparse.csr_matrix(Xh).copy()
         self.Xd = scipy.sparse.csr_matrix(Xd).copy()
         self.Xh = self.Xh/np.max(self.Xh)
@@ -199,14 +235,15 @@ class JointNMF:
         
         print("Initialized disease with reconstruction error: ", min_reconstruction_err)
         
-        # healthy programs
+        # Healthy programs
+        # generate helathy - latent factor contribution
         if Wh is None:
             self.Wh = scipy.sparse.csr_matrix(self.nmfh.transform(self.Xh))
         else:
             if (Wh.shape != (self.Xh.shape[0], self.nh_components + self.nsh_components)):
                 raise ValueError("Initial Wh has wrong shape.")
             self.Wh = np.copy(Wh)
-            
+        # generate healthy - latent factor contribution
         if Hh is None:
             self.Hh = scipy.sparse.csr_matrix(self.nmfh.components_)
         else:
@@ -214,14 +251,15 @@ class JointNMF:
                 raise ValueError("Initial Wh has wrong shape.")
             self.Hh = np.copy(Hh) 
         
-        # disease programs
+        # Disease programs
+        # generate disease - latent factor contribution
         if Wd is None:
             self.Wd = scipy.sparse.csr_matrix(self.nmfd.transform(self.Xd))
         else:
             if (Wd.shape != (self.Xd.shape[0], self.nd_components + self.nsh_components)):
                 raise ValueError("Initial Wd has wrong shape.")
             self.Wd = np.copy(Wd)
-        
+        # generate disease - latent factor contrbution
         if Hd is None:
             self.Hd = scipy.sparse.csr_matrix(self.nmfd.components_)
         else:
@@ -242,6 +280,7 @@ class JointNMF:
         self.Hd_orig = self.Hd[reorder_disease_idxs, :].copy()
         self.Hd = self.Hd[reorder_disease_idxs, :]
         
+        # Computing reconstruction error (How simmilar are the matrixes to the original ones)
         healthy_reconstruction = sparse.linalg.norm(self.Xh - self.Wh.dot(self.Hh), ord='fro')
         disease_reconstruction = sparse.linalg.norm(self.Xd - self.Wd.dot(self.Hd), ord='fro')
         print ("the reconstruction value for healthy and disease: %.5f, %.5f"%(healthy_reconstruction, disease_reconstruction))
@@ -258,6 +297,8 @@ class JointNMF:
         plt.xlabel("Disease Programs")
         plt.ylabel("Healthy Programs")
         plt.show()
+
+
 
         # option for user input mu or estimated mu 
         if mu:
@@ -278,6 +319,13 @@ class JointNMF:
             correlations.append(correlation)
         correlations = np.array(correlations)
         correlations.shape
+
+        if os.path.isdir('./process_program') == False:
+            os.mkdir("./process_program")
+        print(correlation)
+        print("correlation shape: " + str(correlations.shape))
+        corre = pd.DataFrame(np.vstack(correlations).T, columns=self.Wh.columns, index=self.Wd.var_names)
+        corre.to_csv("%s/%s_jointNMF_correlation.csv"%(save_dir,data_name))
 
         reorder_healthy_idxs = []
         reorder_disease_idxs = []
@@ -382,6 +430,21 @@ class JointNMF:
         time_used = (time()-t0)/60.
         print("Took {0:.3f} minutes to reach current solution.".format(time_used), flush=True)
 
+        if os.path.isdir('./process_program') == False:
+            os.mkdir("./process_program")
+        
+        arrayWd = pd.DataFrame(self.Wd, index = self.Xd.obs_names, columns = ['NMF_%d'%i for i in range(self.Wd.shape[1])])
+        arrayHd = pd.DataFrame(self.Hd, index= self.Xd.var_names, columns=['NMF_%d'%i for i in range(self.Hd.shape[0])])
+        
+        arrayWh = pd.DataFrame(self.Wh, index = self.Xh.obs_names, columns = ['NMF_%d'%i for i in range(self.Wh.shape[1])])
+        arrayHh = pd.DataFrame(self.Hh, index= self.Xh.var_names, columns=['NMF_%d'%i for i in range(self.Hh.shape[0])])
+
+        arrayWd.to_csv("%s/%s_jointNMF_case_cellprocess.csv"(save_dir,data_name))
+        arrayHd.to_csv("%s/%s_jointNMF_case_geneprocess.csv"(save_dir,data_name))
+        
+        arrayWh.to_csv("%s/%s_jointNMF_case_cellprocess.csv"(save_dir,data_name))
+        arrayHh.to_csv("%s/%s_jointNMF_case_geneprocess.csv"(save_dir,data_name))
+
         return (chi2, time_used)
     
 
@@ -404,6 +467,3 @@ if scaleX < 0 :
     Xd = Xd + scaleX
 trail = JointNMF(Xh=Xh, Xd=Xd)
 
-trail.align_matrices()
-trail.cost
-trail.solve()
