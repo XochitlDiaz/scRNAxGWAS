@@ -164,17 +164,17 @@ _smallnumber = 1E-10
 _smallnumber2 = 1E-04
 
 class JointNMF:
-    def __init__(self, exp_mat_dir, status_colname, hlabel, dlabel ,Xh,Xd, Wh=None, Hh=None, Wshh=None, Hshh=None, Wshd=None, Hshd=None, Wd=None, Hd=None, 
+    def __init__(self, exp_mat_dir, status_colname, hlabel, dlabel , Wh=None, Hh=None, Wshh=None, Hshh=None, Wshd=None, Hshd=None, Wd=None, Hd=None, 
                  nh_components=10, nsh_components=10, nd_components=10, gamma=1, mu=None, numstarts=5):
         
         self.exp = sc.read_h5ad(exp_mat_dir)
         scaleX = self.exp.X.min()
-        
+
         #######
         # When gnerating Latent factors data, first give some information
         # on the data that is being processed
         print("Generating celltype programs for the file:" + exp_mat_dir)
-        data_name = exp_mat_dir[exp_mat_dir.rfind("/") + 1:(exp_mat_dir.rfind(".h5ad"))]
+        self.data_name = exp_mat_dir[exp_mat_dir.rfind("/") + 1:(exp_mat_dir.rfind(".h5ad"))]
         print("Automatically chosen data name:  " + data_name)
         print("\nDescription of the data:")
         print(str(self.exp.shape[0]) + " cells | " + str(self.exp.shape[1]) + " genes")
@@ -320,12 +320,6 @@ class JointNMF:
         correlations = np.array(correlations)
         correlations.shape
 
-        if os.path.isdir('./process_program') == False:
-            os.mkdir("./process_program")
-        print(correlation)
-        print("correlation shape: " + str(correlations.shape))
-        corre = pd.DataFrame(np.vstack(correlations).T, columns=self.Wh.columns, index=self.Wd.var_names)
-        corre.to_csv("%s/%s_jointNMF_correlation.csv"%(save_dir,data_name))
 
         reorder_healthy_idxs = []
         reorder_disease_idxs = []
@@ -360,8 +354,7 @@ class JointNMF:
         return chi2
     
     def solve(self, W_only=False, H_only=False, sparsemode=False, maxiters=None, tol=None):
-        
-        
+
         # initialize the state
         t0 = time()        
         niter = 0
@@ -430,24 +423,31 @@ class JointNMF:
         time_used = (time()-t0)/60.
         print("Took {0:.3f} minutes to reach current solution.".format(time_used), flush=True)
 
-        if os.path.isdir('./process_program') == False:
-            os.mkdir("./process_program")
-        
-        arrayWd = pd.DataFrame(self.Wd, index = self.Xd.obs_names, columns = ['NMF_%d'%i for i in range(self.Wd.shape[1])])
-        arrayHd = pd.DataFrame(self.Hd, index= self.Xd.var_names, columns=['NMF_%d'%i for i in range(self.Hd.shape[0])])
-        
-        arrayWh = pd.DataFrame(self.Wh, index = self.Xh.obs_names, columns = ['NMF_%d'%i for i in range(self.Wh.shape[1])])
-        arrayHh = pd.DataFrame(self.Hh, index= self.Xh.var_names, columns=['NMF_%d'%i for i in range(self.Hh.shape[0])])
 
-        arrayWd.to_csv("%s/%s_jointNMF_case_cellprocess.csv"(save_dir,data_name))
-        arrayHd.to_csv("%s/%s_jointNMF_case_geneprocess.csv"(save_dir,data_name))
-        
-        arrayWh.to_csv("%s/%s_jointNMF_case_cellprocess.csv"(save_dir,data_name))
-        arrayHh.to_csv("%s/%s_jointNMF_case_geneprocess.csv"(save_dir,data_name))
+        #Save data
+
+        write_mat_jointNMF(self.Wd, "Wd", data_name)
+        write_mat_jointNMF(self.Hd, "Hd", data_name, genes=self.exp.var_names)
+
+        write_mat_jointNMF(self.Wh, "Wh", data_name)
+        write_mat_jointNMF(self.Hh, "Hh", data_name, genes=self.exp.var_names)
+
+        write_mat_jointNMF(self.Wshd, "Wshd", data_name)
+        write_mat_jointNMF(self.Wshd, "Wshh", data_name)
+
+        print( "(final chi , time used)")
 
         return (chi2, time_used)
     
 
+def write_mat_jointNMF(mtx, name, data_name, genes= None):
+    # Write and save results in folder
+    save_dir="./process_program/"
+    if os.path.isdir(save_dir) == False:
+        os.mkdir(save_dir)
+    df = mtx.toarray()
+    df = pd.DataFrame(df, columns = ["NMF" + str(i) for i in range(df.shape[1])], index=genes )
+    df.to_csv("%s/%s_%s.csv"%(save_dir,data_name,name))
 
 
 
@@ -455,15 +455,34 @@ class JointNMF:
 
 
 ######## TEST ########
-exp.obs['status'].unique()
-scaleX = exp.X.min()
-healthy_exp = exp[exp.obs['status']=='HC']
-disese_exp = exp[exp.obs['status']=='Case']
+'''
+# Ocmpute initial NMF
+trail = JointNMF(exp_mat_dir, status_colname, hlabel, dlabel)
+# Compute optimization criterion chi and update factorized matrixes
+trail.solve()
 
-Xh = healthy_exp.X
-Xd = healthy_exp.X
-if scaleX < 0 :
-    Xh = Xh + scaleX
-    Xd = Xd + scaleX
-trail = JointNMF(Xh=Xh, Xd=Xd)
 
+## Access updated factorized Matrices ##
+# (latent factors -> cells : healthy [Lh]) Access updated weights of latent factors to each cell on the healthy set (LF -> cells : healthy)
+trail.Wh
+# (genes -> latent factors : healthy [Lh]) Access updated weights of gene contribution to latent factors on the healthy set
+trail.Hh
+
+# (latent factors -> cells : disease [Ld]) 
+trail.Wd
+# (genes -> latent factors : disease [Ld])
+trail.Hd
+
+
+### Are these program weights???
+# According to the code this is definced by trail.Wh[:,:nsh_components] , which would be the first nshcomponents in the thing
+# (latent factors -> cells : shared in disease mat [Lcd])
+trail.Wshd
+# (cells -> latent factors : shared in disease mat [Lcd])
+#trail.Hshd
+
+# (latent factors -> cells : shared in healthy mat [Lch])
+trail.Wshh
+# (cells -> latent factors : shared in healthy mat [Lch])
+#trail.Hshh
+'''
