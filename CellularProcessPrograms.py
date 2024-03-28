@@ -43,31 +43,36 @@ hlabel= 'HC'
 
 dlabel= 'Case'
 
-########## TEST ###############
-scdatasets = {'simdata': ("./dummy_data/simdata.h5ad","Patient") }
+controllab='Ctrl'
 
-def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_colname):
+########## TEST ###############
+
+def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_colname, controllab):
     #read in data
     exp = sc.read_h5ad(exp_mat_dir) # tissuedata=exp
     #change referenced column names for anndata manipulation
     exp.obs.rename(columns={ct_colname:'cell_type', status_colname:'status', sample_colname:'patient_id'},inplace=True)
     
     num_celltypes = len(exp.obs["cell_type"].unique())
+
+    exp = exp[exp.obs.status == controllab]
+
     #######
     # When gnerating Celltype Data, first give some information
     # on the data that is being processed
     print("Generating celltype programs for the file:" + exp_mat_dir)
+    print("Using only healty cells")
     data_name = exp_mat_dir[exp_mat_dir.rfind("/") + 1:(exp_mat_dir.rfind(".h5ad"))] # data_name = tissue
     print("Automatically chosen data name:  " + data_name)
     print("\nDescription of the data:")
-    print( str(num_celltypes) + " cells | " + str(exp.shape[1]) + " genes | "+ str(len(set(exp.obs['patient_id']))) + " samples")
+    print( str(exp.obs.shape[0]) + " cells | " + str(exp.shape[1]) + " genes | "+ str(len(set(exp.obs['patient_id']))) + " samples")
     print(str(len(set(exp.obs['cell_type']))) + " cell types: " + str(list(exp.obs['cell_type'].unique())))
     print("cell state groups: " + str(list(exp.obs['status'].unique())))
     print("\nComputing " + str(num_celltypes + 10) + " cellular processes")
     ######
 
     model = NMF(n_components=num_celltypes+10, init='random', random_state=0)
-    sc.pp._highly_variable_genes(exp, n_top_genes=2000)
+    sc.pp.highly_variable_genes(exp, n_top_genes=2000)
     exp = exp[:,exp.var['highly_variable']]
     exp.layers['counts'] = exp.X
     X = exp.layers['counts']
@@ -139,6 +144,7 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
     
     nmf_specificity = (W > .3).sum(0)
     display(W)
+    W.to_csv('%s/%s_W_correlation_NMFxcellprograms.csv'%(save_dir,data_name))
     for i in range(W.shape[0]):
         for j in range(W.shape[1]):
             if W.values[i,j] > .65 and nmf_specificity[j]==1:
@@ -150,8 +156,7 @@ def genCellularProcessPrograms(exp_mat_dir, ct_colname, status_colname, sample_c
     for i in range(H.shape[1]):
         print(i)
         print(",".join(H.sort_values(by='NMF_%d'%i, ascending=False).index[0:50]))
-        print(",".join(H.sort_values(by='NMF_%d'%i, ascending=False).index[0:50]))
-        
+        print(",".join(H.sort_values(by='NMF_%d'%i, ascending=False).index[0:50]))        
         print(len(set(H.sort_values(by='NMF_%d'%i, ascending=False).index[0:500]).intersection(H.sort_values(by='NMF_%d'%i, ascending=False).index[0:500])))
  
 ###############################
@@ -311,6 +316,24 @@ class JointNMF:
     
     def align_matrices(self):
         correlations = []
+        min_rows = min(self.Wh.shape[0], self.Wd.shape[0])
+                
+        if self.Wh.shape[0] > min_rows:
+            # Truncate Wh and substitute the last row with its mean
+            Wh_truncated = self.Wh[:min_rows]
+            mean = np.mean( self.Wh[min_rows:], axis=0)
+            Wh_truncated = np.vstack([Wh_truncated, mean])
+            self.Wh = Wh_truncated
+    
+        if self.Wd.shape[0] > min_rows:
+            # Truncate Wd and substitute the last row with its mean
+            Wd_truncated = self.Wd[:min_rows]
+            mean = np.mean(self.Wd[min_rows:], axis=0)
+            Wd_truncated = np.vstack([Wd_truncated, mean])
+            self.Wd = Wd_truncated
+
+    
+
         for i in range(self.Wh.shape[1]):
             correlation = []
             for j in range(self.Wd.shape[1]):
