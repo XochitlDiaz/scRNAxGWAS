@@ -333,7 +333,6 @@ class JointNMF:
             self.Wd = Wd_truncated
 
     
-
         for i in range(self.Wh.shape[1]):
             correlation = []
             for j in range(self.Wd.shape[1]):
