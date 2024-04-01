@@ -465,7 +465,7 @@ class JointNMF:
         return (chi2, time_used)
     
 
-def write_mat_jointNMF(mtx, name, data_namecd ):
+def write_mat_jointNMF(mtx, name, data_name ):
     # Write and save results in folder
     save_dir="./process_program" + self.data_name
     if os.path.isdir(save_dir) == False:
