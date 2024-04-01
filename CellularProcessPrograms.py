@@ -20,8 +20,9 @@ from sklearn.utils import check_random_state
 from sklearn.utils.extmath import safe_sparse_dot
 from sklearn.decomposition import NMF
 from matplotlib import pyplot as plt
-
-
+import random
+from scipy.sparse import csr_matrix
+import pickle
 # In future versions make this into a a propper input
 # .h5ad data file with celltype id and gene names
 exp_mat_dir = "./dummy_data/simdata.h5ad"
@@ -173,27 +174,46 @@ class JointNMF:
                  nh_components=10, nsh_components=10, nd_components=10, gamma=1, mu=None, numstarts=5):
         
         self.exp = sc.read_h5ad(exp_mat_dir)
+        self.status_colname = status_colname
+        self.exp = self.exp[(self.exp.obs[self.status_colname] == hlabel) | (self.exp.obs[self.status_colname] == dlabel)]
         scaleX = self.exp.X.min()
+
+        self.Xh = self.exp[self.exp.obs[self.status_colname]==hlabel]
+        self.Xd = self.exp[self.exp.obs[self.status_colname]==dlabel]
+
+        # Trimmdown the matrixes to be the same cellcount
+        # In later versions modify this to intead of picking cells randomply, pick cells
+        # randomply in proportion to thier population count (in terma of data set, status and celltype)
+        min_rows = min(self.Xh.shape[0], self.Xd.shape[0])
+        if self.Xh.shape[0] > min_rows:
+            # Truncate Wh and substitute the last row with its mean
+            rows_to_delete = random.sample(range(self.Xh.shape[0]), self.Xh.shape[0]- min_rows)
+            rows_to_keep = np.setdiff1d(np.arange(self.Xh.shape[0]), rows_to_delete)
+            Xh_truncated = self.Xh[rows_to_keep]
+            self.Xh = Xh_truncated
+    
+        if self.Xd.shape[0] > min_rows:
+            # Truncate Wd and substitute the last row with its mean
+            rows_to_delete = random.sample(range(self.Xd.shape[0]), self.Xd.shape[0]- min_rows)
+            rows_to_keep = np.setdiff1d(np.arange(self.Xd.shape[0]), rows_to_delete)
+            Xd_truncated = self.Xd[rows_to_keep]
+            self.Xd = Xd_truncated
 
         #######
         # When gnerating Latent factors data, first give some information
         # on the data that is being processed
         print("Generating celltype programs for the file:" + exp_mat_dir)
         self.data_name = exp_mat_dir[exp_mat_dir.rfind("/") + 1:(exp_mat_dir.rfind(".h5ad"))]
-        print("Automatically chosen data name:  " + data_name)
+        print("Automatically chosen data name:  " + self.data_name)
         print("\nDescription of the data:")
-        print(str(self.exp.shape[0]) + " cells | " + str(self.exp.shape[1]) + " genes")
+        print("Healthy expression matrix : " + str(self.Xh.shape[0]) + " cells | " + str(self.Xh.shape[1]) + " genes")
+        print("Disease expression matrix : " +str(self.Xd.shape[0]) + " cells | " + str(self.Xd.shape[1]) + " genes")
         print("cell state groups: " + str(list(self.exp.obs[status_colname].unique())))
         print("Generating joint NMF for " + hlabel + "and " + dlabel)
         ######
 
-
-
-        Xh = self.exp[self.exp.obs[status_colname]==hlabel]
-        Xd = self.exp[self.exp.obs[status_colname]==dlabel]
-
-        Xh = Xh.X
-        Xd = Xd.X
+        Xh = self.Xh.X
+        Xd = self.Xd.X
         if scaleX < 0 :
             Xh = Xh + scaleX
             Xd = Xd + scaleX
@@ -212,7 +232,7 @@ class JointNMF:
         self.tol = _smallnumber
         
         self.gamma = gamma
-        
+
         
         # initialize the matrix using result from standard NMF for healthy programs
         min_reconstruction_err = _largenumber
@@ -316,23 +336,6 @@ class JointNMF:
     
     def align_matrices(self):
         correlations = []
-        min_rows = min(self.Wh.shape[0], self.Wd.shape[0])
-                
-        if self.Wh.shape[0] > min_rows:
-            # Truncate Wh and substitute the last row with its mean
-            Wh_truncated = self.Wh[:min_rows]
-            mean = np.mean( self.Wh[min_rows:], axis=0)
-            Wh_truncated = np.vstack([Wh_truncated, mean])
-            self.Wh = Wh_truncated
-    
-        if self.Wd.shape[0] > min_rows:
-            # Truncate Wd and substitute the last row with its mean
-            Wd_truncated = self.Wd[:min_rows]
-            mean = np.mean(self.Wd[min_rows:], axis=0)
-            Wd_truncated = np.vstack([Wd_truncated, mean])
-            self.Wd = Wd_truncated
-
-    
         for i in range(self.Wh.shape[1]):
             correlation = []
             for j in range(self.Wd.shape[1]):
@@ -449,10 +452,10 @@ class JointNMF:
         #Save data
 
         write_mat_jointNMF(self.Wd, "Wd", data_name)
-        write_mat_jointNMF(self.Hd, "Hd", data_name, genes=self.exp.var_names)
+        write_mat_jointNMF(self.Hd, "Hd", data_name)
 
         write_mat_jointNMF(self.Wh, "Wh", data_name)
-        write_mat_jointNMF(self.Hh, "Hh", data_name, genes=self.exp.var_names)
+        write_mat_jointNMF(self.Hh, "Hh", data_name)
 
         write_mat_jointNMF(self.Wshd, "Wshd", data_name)
         write_mat_jointNMF(self.Wshd, "Wshh", data_name)
@@ -462,13 +465,13 @@ class JointNMF:
         return (chi2, time_used)
     
 
-def write_mat_jointNMF(mtx, name, data_name, genes= None):
+def write_mat_jointNMF(mtx, name, data_namecd ):
     # Write and save results in folder
-    save_dir="./process_program/"
+    save_dir="./process_program" + self.data_name
     if os.path.isdir(save_dir) == False:
         os.mkdir(save_dir)
     df = mtx.toarray()
-    df = pd.DataFrame(df, columns = ["NMF" + str(i) for i in range(df.shape[1])], index=genes )
+    df = pd.DataFrame(df, columns = ["NMF" + str(i) for i in range(df.shape[1])])
     df.to_csv("%s/%s_%s.csv"%(save_dir,data_name,name))
 
 
