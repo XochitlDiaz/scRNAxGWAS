@@ -451,28 +451,28 @@ class JointNMF:
 
         #Save data
 
-        write_mat_jointNMF(self.Wd, "Wd", data_name)
-        write_mat_jointNMF(self.Hd, "Hd", data_name)
+        write_mat_jointNMF(self.Wd, "Wd", self.data_name)
+        write_mat_jointNMF(self.Hd, "Hd", self.data_name)
 
-        write_mat_jointNMF(self.Wh, "Wh", data_name)
-        write_mat_jointNMF(self.Hh, "Hh", data_name)
+        write_mat_jointNMF(self.Wh, "Wh", self.data_name)
+        write_mat_jointNMF(self.Hh, "Hh", self.data_name)
 
-        write_mat_jointNMF(self.Wshd, "Wshd", data_name)
-        write_mat_jointNMF(self.Wshd, "Wshh", data_name)
+        write_mat_jointNMF(self.Wshd, "Wshd", self.data_name)
+        write_mat_jointNMF(self.Wshd, "Wshh", self.data_name)
 
         print( "(final chi , time used)")
 
         return (chi2, time_used)
     
 
-def write_mat_jointNMF(mtx, name, data_name ):
+def write_mat_jointNMF(mtx, name, data_name):
     # Write and save results in folder
-    save_dir="./process_program" + self.data_name
+    save_dir="./process_program" + data_name
     if os.path.isdir(save_dir) == False:
         os.mkdir(save_dir)
     df = mtx.toarray()
     df = pd.DataFrame(df, columns = ["NMF" + str(i) for i in range(df.shape[1])])
-    df.to_csv("%s/%s_%s.csv"%(save_dir,data_name,name))
+    df.to_csv("%s/%s_%s.csv"%(save_dir,name))
 
 
 
